@@ -1,0 +1,122 @@
+#!/usr/bin/env python3.10
+# -*- coding: utf-8 -*-
+# btc_rates - Wednesday, June 7, 2017
+# Ref: http://bit.ly/2qZwqkp
+# http://blockxchain.org/2017/06/03/blockchain-and-python-exploring-the-python-blockchain-package/
+
+""" Retrieve Bitcoin prices using the blockchain library """
+__version__ = "2.1.39"
+
+import logging
+from blockchain import exchangerates as er
+from datetime import datetime, timedelta, timezone
+from logging.handlers import RotatingFileHandler, SMTPHandler
+from pathlib import Path
+from time import sleep
+
+__MODULE__ = Path(__file__).resolve().stem
+
+
+def main_old():
+	fn_logger = logging.getLogger(__MODULE__ + ".main")
+	stop_dt = _run_dt + timedelta(hours=24)
+	while datetime.now().astimezone() <= stop_dt:
+		get_prices()
+		dt = datetime.now()
+		delay = (59 - dt.minute) * 60 + (59 - dt.second)
+		fn_logger.debug("Sleeping for %d seconds (until the top of the hour)" % delay)
+		sleep(delay)
+	return
+
+
+def get_prices():
+	fn_logger = logging.getLogger(__MODULE__ + ".get_prices")
+	rate_cad = rate_usd = None
+	retries = 3
+	while retries > 0:
+		retries -= 1
+		try:
+			rates = er.get_ticker()
+			rate_cad = rates["CAD"]
+			rate_usd = rates["USD"]
+			retries = -1
+		except er.util.TIMEOUT as e:
+			fn_logger.exception("TIMEOUT: %s  Retries: %d" % (e, retries))
+		except er.util.HTTPError as e:
+			fn_logger.exception("HTTP Error: %s  Retries: %d" % (e, retries))
+		except er.util.APIException as e:
+			fn_logger.exception("API Exception: %s  Retries: %d" % (e, retries))
+		except Exception as e:
+			fn_logger.exception("Exception: %s  Retries: %d" % (e, retries))
+	fn_logger.info(
+		"%s %s\t%s %s"
+		% (
+			rate_cad.symbol,
+			format(rate_cad.p15min, ",.2f"),
+			rate_usd.symbol,
+			format(rate_usd.p15min, ",.2f"),
+		)
+	)
+	return
+
+
+"""
+fn_logger.info(_run_dt.replace(microsecond=0).isoformat(), "\t",
+	"CAD", rate_cad.symbol, format(rate_cad.p15min, ",.2f"), "\t",
+	"USD", rate_usd.symbol, format(rate_usd.p15min, ",.2f"))
+"""
+"""
+Response object field definitions
+
+Currency
+
+last : float
+buy : float
+sell : float
+symbol : str
+p15min : float - 15 minute delayed price
+"""
+
+
+if __name__ == "__main__":
+	_run_dt = datetime.now().astimezone().replace(microsecond=0)
+	_run_utc = _run_dt.astimezone(timezone.utc).replace(tzinfo=None)
+	_fdate = _run_dt.strftime("%Y-%m")
+
+	# Configure logging
+	logdir = Path("~").expanduser() / ".local" / "var" / "log" / __MODULE__
+	Path.mkdir(logdir, parents=True, exist_ok=True)
+	logfilename = logdir.joinpath("%s_%s.log" % (__MODULE__, _fdate))
+	log_level = logging.DEBUG
+	logger = logging.getLogger("")
+	file_handler = RotatingFileHandler(
+		logfilename, maxBytes=8 * 1024**2, backupCount=9
+	)
+	logging.basicConfig(
+		level=log_level,
+		format="%(asctime)s %(name)-12s %(levelname)-8s %(message)s",
+		datefmt="%Y-%m-%d %H:%M:%S%z",
+		handlers=[
+			file_handler,
+		],
+	)
+	# define a Handler which writes INFO messages or higher to the sys.stderr
+	console = logging.StreamHandler()
+	console.setLevel(logging.INFO)
+	# set a format which is simpler for console use
+	formatter = logging.Formatter("%(levelname)-8s %(message)s")
+	# tell the handler to use this format
+	console.setFormatter(formatter)
+	# add the handler to the root logger
+	logging.getLogger("").addHandler(console)
+
+	retries = 3
+	while retries > 0:
+		try:
+			# main()
+			get_prices()
+			retries = -1
+		except Exception as e:
+			retries -= 1
+			logger.exception("Exception: %s" % e)
+			sleep(30)

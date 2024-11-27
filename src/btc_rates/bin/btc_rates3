@@ -1,0 +1,111 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# btc_rates3 - Thursday, November 14, 2024
+# Ref: http://bit.ly/2qZwqkp
+# http://blockxchain.org/2017/06/03/blockchain-and-python-exploring-the-python-blockchain-package/
+""" Retrieve Bitcoin prices using the blockchain library """
+__version__ = "3.0.0-dev0"
+
+import logging
+from blockchain import exchangerates as er
+from datetime import datetime, timedelta, timezone
+from logging.handlers import RotatingFileHandler, SMTPHandler
+from pathlib import Path
+from time import sleep
+
+__module__ = Path(__file__).resolve().stem
+basedir = Path(__file__).resolve().parent
+
+
+# This is the main function
+def get_prices():
+	fn_logger = logging.getLogger(__module__ + ".get_prices")
+	rate_cad = rate_usd = None
+	retries = 3
+	while retries > 0:
+		retries -= 1
+		try:
+			rates = er.get_ticker()
+			rate_cad = rates["CAD"]
+			rate_usd = rates["USD"]
+			retries = -1
+		except er.util.TIMEOUT as e:
+			fn_logger.exception("TIMEOUT: %s  Retries: %d" % (e, retries))
+		except er.util.HTTPError as e:
+			fn_logger.exception("HTTP Error: %s  Retries: %d" % (e, retries))
+		except er.util.APIException as e:
+			fn_logger.exception("API Exception: %s  Retries: %d" % (e, retries))
+		except Exception as e:
+			fn_logger.exception("Exception: %s  Retries: %d" % (e, retries))
+	fn_logger.info(
+		"%s %s\t%s %s"
+		% (
+			rate_cad.symbol,
+			format(rate_cad.p15min, ",.2f"),
+			rate_usd.symbol,
+			format(rate_usd.p15min, ",.2f"),
+		)
+	)
+	return
+
+
+"""
+fn_logger.info(_run_dt.replace(microsecond=0).isoformat(), "\t",
+	"CAD", rate_cad.symbol, format(rate_cad.p15min, ",.2f"), "\t",
+	"USD", rate_usd.symbol, format(rate_usd.p15min, ",.2f"))
+"""
+"""
+Response object field definitions
+
+Currency
+
+last : float
+buy : float
+sell : float
+symbol : str
+p15min : float - 15 minute delayed price
+"""
+
+
+if __name__ == "__main__":
+	_run_dt = datetime.now().astimezone().replace(microsecond=0)
+	_run_utc = _run_dt.astimezone(timezone.utc).replace(tzinfo=None)
+	_fdate = _run_dt.strftime("%Y-%m")
+
+	# Configure logging
+	logdir = Path("~").expanduser() / ".local" / "var" / "log" / __module__
+	Path.mkdir(logdir, parents=True, exist_ok=True)
+	logfilename = logdir.joinpath("%s_%s.log" % (__module__, _fdate))
+	log_level = logging.DEBUG
+	logger = logging.getLogger("")
+	file_handler = RotatingFileHandler(
+		logfilename, maxBytes=8 * 1024**2, backupCount=9
+	)
+	logging.basicConfig(
+		level=log_level,
+		format="%(asctime)s %(name)-12s %(levelname)-8s %(message)s",
+		datefmt="%Y-%m-%d %H:%M:%S%z",
+		handlers=[
+			file_handler,
+		],
+	)
+	# define a Handler which writes INFO messages or higher to the sys.stderr
+	console = logging.StreamHandler()
+	console.setLevel(logging.INFO)
+	# set a format which is simpler for console use
+	formatter = logging.Formatter("%(levelname)-8s %(message)s")
+	# tell the handler to use this format
+	console.setFormatter(formatter)
+	# add the handler to the root logger
+	logging.getLogger("").addHandler(console)
+
+	retries = 3
+	while retries > 0:
+		try:
+			# main()
+			get_prices()
+			retries = -1
+		except Exception as e:
+			retries -= 1
+			logger.exception("Exception: %s" % e)
+			sleep(30)
