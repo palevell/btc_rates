@@ -5,7 +5,7 @@
 # http://blockxchain.org/2017/06/03/blockchain-and-python-exploring-the-python-blockchain-package/
 
 """ Retrieve Bitcoin prices using the blockchain library """
-__version__ = "2.1.39"
+__version__ = "2.2.40-dev0"
 
 import logging
 from blockchain import exchangerates as er
@@ -14,23 +14,11 @@ from logging.handlers import RotatingFileHandler, SMTPHandler
 from pathlib import Path
 from time import sleep
 
-__MODULE__ = Path(__file__).resolve().stem
-
-
-def main_old():
-	fn_logger = logging.getLogger(__MODULE__ + ".main")
-	stop_dt = _run_dt + timedelta(hours=24)
-	while datetime.now().astimezone() <= stop_dt:
-		get_prices()
-		dt = datetime.now()
-		delay = (59 - dt.minute) * 60 + (59 - dt.second)
-		fn_logger.debug("Sleeping for %d seconds (until the top of the hour)" % delay)
-		sleep(delay)
-	return
+__module__ = Path(__file__).resolve().stem
 
 
 def get_prices():
-	fn_logger = logging.getLogger(__MODULE__ + ".get_prices")
+	fn_logger = logging.getLogger(__module__ + ".get_prices")
 	rate_cad = rate_usd = None
 	retries = 3
 	while retries > 0:
@@ -84,9 +72,9 @@ if __name__ == "__main__":
 	_fdate = _run_dt.strftime("%Y-%m")
 
 	# Configure logging
-	logdir = Path("~").expanduser() / ".local" / "var" / "log" / __MODULE__
+	logdir = Path("~").expanduser() / ".local" / "var" / "log" / __module__
 	Path.mkdir(logdir, parents=True, exist_ok=True)
-	logfilename = logdir.joinpath("%s_%s.log" % (__MODULE__, _fdate))
+	logfilename = logdir.joinpath("%s_%s.log" % (__module__, _fdate))
 	log_level = logging.DEBUG
 	logger = logging.getLogger("")
 	file_handler = RotatingFileHandler(
@@ -113,7 +101,6 @@ if __name__ == "__main__":
 	retries = 3
 	while retries > 0:
 		try:
-			# main()
 			get_prices()
 			retries = -1
 		except Exception as e:

@@ -1,13 +1,14 @@
-#+TITLE:	btc_rates
+#+TITLE:	BTC Rates
 #+SUBTITLE:	README
 #+DATE:		2024-11-27 08:13:57-05:00
-#+LASTMOD:  
+#+LASTMOD: 2024-11-28 04:12:23-0500 (EST)
 #+OPTIONS:	toc:nil num:nil
 #+STARTUP:	indent showeverything
 #+CATEGORIES[]:	Projects
-#+TAGS[]:	readme python
+#+TAGS[]:	readme python sql bitccoin blockchain
 
 URL: 
 
 * Description
 
+I started this project in 2017, to explore blockchain programming in Python, and quit using it in 2019.

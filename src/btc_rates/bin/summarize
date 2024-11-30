@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # summarize - Friday, November 15, 2024
-""" Summarize Bitcoin Prices (ie. Statistics) - to be incorporated into log_extractor """
-__version__ = "0.2.0-dev27"
+""" Summarize Bitcoin Prices (ie. Statistics) - to be incorporated into price_extractor """
+__version__ = "0.2.1-dev10"
 
 import click
 import os
@@ -15,6 +15,7 @@ from os.path import exists, getmtime, join, lexists, realpath
 from pathlib import Path
 
 import pandas as pd
+import sqlalchemy as sa
 from dateutil.parser import parse, ParserError
 from dateutil.relativedelta import relativedelta
 from environs import Env
@@ -86,10 +87,10 @@ def build_table(table_name: str):
 	if table_name not in ["daily", "weekly", "monthly", "quarterly", "yearly"]:
 		raise ValueError(f"Unrecognized table_name: '{table_name}'")
 	if table_name == "daily":
-		# find dates in dt_prices
+		# find dates in dt_price
 		sql = """
 		SELECT DISTINCT date_id
-		FROM dt_prices
+		FROM dt_price
 		"""
 	return
 
@@ -100,61 +101,58 @@ def build_query(db_column: str) -> str:
 	:param db_column: Date Dimension column to be used in WHERE clause
 	:return: SQL statement
 	"""
-
-	"""
-	SELECT date_id,
-		MIN(cad) AS cad_lo, MAX(cad) AS cad_hi,
-		(SELECT cad FROM dt_prices WHERE date_id = '2024-11-25' ORDER BY date_id ASC) cad_open,
-		(SELECT cad FROM dt_prices WHERE date_id = '2024-11-25' ORDER BY date_id DESC) cad_close
-	FROM dt_prices
-	WHERE date_id = '2024-11-25';
-	"""
-	columns = [f"{db_column} AS report_date",]
-	for cc in ["cad", "usd"]:
-		columns.extend(currency_columns(cc, db_column))
+	logger.debug(f"db_column: {db_column}")
+	columns = "date_id qty cad_open cad_lo cad_hi cad_close usd_open usd_lo usd_hi usd_close".split()
 	cols = ", ".join(columns)
 	query = "\n".join([
 		f"SELECT {cols}",
-		"FROM dt_prices",
+		f"FROM daily_price",
 		f"WHERE {db_column} = :report_date;",
 	])
-	# query = f"SELECT {cols} FROM dt_prices WHERE {db_column} = :report_date;"
 	return query
 
 
 def build_reports(report_date: datetime.date, force: bool) -> None:
 	logger.debug(f"Building reports for {report_date} . . .")
 	reports = which_reports(report_date)
-	if reports:
-		for report_type in reports:
-			logger.debug(f"Report Date: {report_date}  Type: {report_type.capitalize():7s}  DB Column: {reports[report_type]}")
-			db_column = reports[report_type]
-			if report_type == "daily":
-				report_name = report_date.strftime("%A")
-			elif report_type == "weekly":
-				report_name = report_date.strftime("%Y-W%U")
-			elif report_type == "monthly":
-				report_name = report_date.strftime("%Y-%m-%B")
-			elif report_type == "quarterly":
-				# ToDo: Additional information from the Date Dimension is needed
-				quarter = -1
-				report_name = report_date.strftime("%Y-Q{quarter}")
-			elif report_type == "yearly":
-				report_name = report_date.strftime("%Y-W%U")
-			else:
-				raise ValueError(f"Unknown report type: {report_type}")
-			params = {"report_date": str(report_date),}
-			sql = build_query(db_column)
-			logger.debug(sql)
-			# sql2 = "SELECT COUNT(*) FROM dt_prices;"
-			# logger.debug(sql2)
-			with engine.connect() as conn:
-				results = conn.execute(text(sql), params).fetchone()
-				row = dict(results._mapping)
-				logger.debug(row)
-				do_nothing()
-	else:
-		logger.info(f"No reports to generate for {report_date}")
+	if not reports:
+		raise ValueError(f"No reports to generate for {report_date}.")
+	msg = " ".join(reports)
+	logger.debug(f"Reports to be generated for {report_date}: {msg}.")
+	for report_type in reports:
+		items = [
+			f"Report Date: {report_date}",
+			f" Type: {report_type.capitalize():7s}",
+			f" DB Column: {reports[report_type]}",
+		]
+		logger.debug(" ".join(items))
+		db_column = reports[report_type]
+		if report_type == "daily":
+			report_name = report_date.strftime("%A")
+		elif report_type == "weekly":
+			report_name = report_date.strftime("%Y-W%U")
+		elif report_type == "monthly":
+			report_name = report_date.strftime("%Y-%m-%B")
+		elif report_type == "quarterly":
+			# ToDo: Additional information from the Date Dimension is needed
+			quarter = -1
+			report_name = report_date.strftime("%Y-Q{quarter}")
+		elif report_type == "yearly":
+			report_name = report_date.strftime("%Y-W%U")
+		else:
+			raise ValueError(f"Unknown report type: {report_type}")
+		params = {"report_date": str(report_date), }
+		sql = build_query(db_column)
+		logger.debug(sql)
+		# sql2 = "SELECT COUNT(*) FROM dt_price;"
+		# logger.debug(sql2)
+		with engine.connect() as conn:
+			results = conn.execute(text(sql), params).fetchone()
+			row = dict(results._mapping)
+			columns = row.keys()
+			logger.debug("  ".join(columns))
+			logger.debug("  ".join([str(x) for x in row.values()]))
+			do_nothing()
 	return
 
 
@@ -167,14 +165,14 @@ def currency_columns(currency_code: str, db_column: str) -> list[str]:
 	cc = currency_code[:4].lower()
 	"""
 		MIN(cad) AS cad_lo, MAX(cad) AS cad_hi,
-		(SELECT cad FROM dt_prices WHERE date_id = '2024-11-25' ORDER BY date_id ASC) cad_open,
-		(SELECT cad FROM dt_prices WHERE date_id = '2024-11-25' ORDER BY date_id DESC) cad_close
+		(SELECT cad FROM dt_price WHERE date_id = '2024-11-25' ORDER BY date_id ASC) cad_open,
+		(SELECT cad FROM dt_price WHERE date_id = '2024-11-25' ORDER BY date_id DESC) cad_close
 	"""
 	columns = [
 		f"MIN({cc}) AS {cc}_lo",
 		f"MAX({cc}) AS {cc}_hi",
-		f"(SELECT {cc} FROM dt_prices WHERE {db_column} = :report_date ORDER BY {db_column} ASC) {cc}_open",
-		f"(SELECT {cc} FROM dt_prices WHERE {db_column} = :report_date ORDER BY {db_column} DESC) {cc}_close",
+		f"(SELECT {cc} FROM dt_price WHERE {db_column} = :report_date ORDER BY {db_column} ASC) {cc}_open",
+		f"(SELECT {cc} FROM dt_price WHERE {db_column} = :report_date ORDER BY {db_column} DESC) {cc}_close",
 	]
 	return columns
 
@@ -186,7 +184,7 @@ def summarize(period: str, report_date):
 	group_by = None
 	thru_date = None
 	if period == "daily":
-		src_table = "dt_prices"
+		src_table = "dt_price"
 		dst_table = "dt_daily"
 		group_by = "date_id"
 		thru_date = _run_dt.date() - timedelta(days=1)
@@ -319,9 +317,22 @@ if __name__ == '__main__':
 
 	# Environment
 	_debug = env.bool("DEBUG", default=False)
-	_db_url = "sqlite:///" + str(_basedir / env("SQLITE_DB_NAME"))
-	logger.debug(f"Connecting to {_db_url} . . .")
+	_db_url = env("SQLALCHEMY_DATABASE_URI")
+	_db_schema = env("DB_SCHEMA")
 	engine = create_engine(_db_url, echo=_debug)
+
+	@sa.event.listens_for(engine, "connect", insert=True)
+	def set_search_path(dbapi_connection, connection_record):
+		"""
+		Set schema search path in database
+		"""
+		sql = f"SET SESSION search_path TO {_db_schema},public;"
+		existing_autocommit = dbapi_connection.autocommit
+		dbapi_connection.autocommit = True
+		cursor = dbapi_connection.cursor()
+		cursor.execute(sql)
+		cursor.close()
+		dbapi_connection.autocommit = existing_autocommit
 
 	# if len(sys.argv) > 1:
 	# 	init()

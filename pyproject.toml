@@ -5,7 +5,7 @@ description = "Bitcoin Rates, from blockchain library"
 authors = [
     {name = "iPad Guy", email = "ipad.guy.100@gmail.com"},
 ]
-dependencies = ["blockchain>=1.4.4", "sqlalchemy>=2.0.36", "psycopg>=3.2.3", "pandas>=2.2.3", "xdg>=6.0.0", "environs>=11.1.0", "click>=8.1.7", "loguru>=0.7.2", "pendulum>=3.0.0"]
+dependencies = ["blockchain>=1.4.4", "sqlalchemy>=2.0.36", "psycopg>=3.2.3", "pandas>=2.2.3", "xdg>=6.0.0", "environs>=11.1.0", "click>=8.1.7", "loguru>=0.7.2", "pendulum>=3.0.0", "scp>=0.15.0"]
 requires-python = ">=3.12"
 readme = "README.md"
 license = {text = "MIT"}

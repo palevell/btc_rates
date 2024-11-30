@@ -1,14 +1,25 @@
-#+TITLE:	btc_rates
+#+TITLE:	BTC Rates
 #+SUBTITLE:	Log
 #+DATE:		2024-11-27 08:13:57-05:00
-#+LASTMOD:  
+#+LASTMOD: 2024-11-30 06:13:21-0500 (EST)
 #+OPTIONS:	toc:nil num:nil
 #+STARTUP:	indent show3levels
 #+CATEGORIES[]:	Projects
-#+TAGS[]:	log python
+#+TAGS[]:	log python sql bitcoin blockchain
+
+* Saturday, November 30, 2024
 
 * Wednesday, November 27, 2024
-- 
-- 
+- With Bitcoin prices on the rise, I working on this project, again
+** Adding Reports
+*** Adding a Database
 
+* Thursday, December 9, 2021
+- Added "retry" loop
+
+
+* Monday, December 6, 2021
+- Blew the dust off of this project...
+- Added logging facility
+- After fiddling with the sleep timer, I opted to just use fcron
 
