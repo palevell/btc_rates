@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # summarize - Friday, November 15, 2024
 """ Summarize Bitcoin Prices (ie. Statistics) - to be incorporated into price_extractor """
-__version__ = "0.2.1-dev10"
+__version__ = "0.2.2-dev9"
 
 import click
 import os
@@ -54,17 +54,15 @@ def main(report_date, force):
 		raise ValueError("Future dates aren't processed.")
 	logger.debug(f"Processing Bitcoin price history for {report_date} . . .")
 	build_reports(report_date, force)
-	# for p in ["daily", "weekly", "monthly", "quarterly", "yearly"]:
-	# 	try:
-	# 		summarize(p, report_date)
-	# 	except NotImplementedError as nie:
-	# 		logger.warning(f"Not Implented: {nie}")
 	return
 
 
 def init():
 	started = time.strftime(_iso_datefmt, _run_localtime)
 	logger.info(f"Run Start: {__module__} v{__version__} {started}")
+	check_for_data()
+	for t in ["daily", "weekly", "monthly"]:
+		build_table(t)
 	return
 
 
@@ -81,21 +79,7 @@ def do_nothing():
 	pass
 
 
-def build_table(table_name: str):
-	table_name = table_name.lower()
-	table_prefix = "dt_"
-	if table_name not in ["daily", "weekly", "monthly", "quarterly", "yearly"]:
-		raise ValueError(f"Unrecognized table_name: '{table_name}'")
-	if table_name == "daily":
-		# find dates in dt_price
-		sql = """
-		SELECT DISTINCT date_id
-		FROM dt_price
-		"""
-	return
-
-
-def build_query(db_column: str) -> str:
+def build_query_old(db_column: str) -> str:
 	"""
 	Builds the SQL statement for building reports
 	:param db_column: Date Dimension column to be used in WHERE clause
@@ -112,12 +96,45 @@ def build_query(db_column: str) -> str:
 	return query
 
 
+def build_query(report_type: str) -> list[str]:
+	report_type = report_type.lower()
+	table_prefix = "dt_"
+	date_column = "date_id"
+	if report_type not in ["daily", "weekly", "monthly", "quarterly", "yearly"]:
+		raise ValueError(f"Unrecognized report_type: '{report_type}'")
+	if report_type == "daily":
+		# VIEW: daily_change
+		date_column = "date_id"
+	elif report_type == "weekly":
+		# VIEW: weekly_change
+		date_column = "week_thru"
+	elif report_type == "monthly":
+		# VIEW: monthly_change
+		date_column = "month_thru"
+	elif report_type == "quarterly":
+		# VIEW: quarterly_change
+		date_column = "quarter_thru"
+	elif report_type == "yearly":
+		# VIEW: yearly_change
+		date_column = "yearly_thru"
+	columns = [date_column,]
+	columns.extend(currency_columns("cad"))
+	columns.extend(currency_columns("usd"))
+	cols = ",".join(columns)
+	query = "\n".join([
+		f"SELECT {cols}",
+		f"FROM {report_type}_change",
+		f"WHERE {date_column} = :report_date;",
+	])
+	return query
+
+
 def build_reports(report_date: datetime.date, force: bool) -> None:
 	logger.debug(f"Building reports for {report_date} . . .")
 	reports = which_reports(report_date)
 	if not reports:
 		raise ValueError(f"No reports to generate for {report_date}.")
-	msg = " ".join(reports)
+	msg = ", ".join(reports)
 	logger.debug(f"Reports to be generated for {report_date}: {msg}.")
 	for report_type in reports:
 		items = [
@@ -142,23 +159,68 @@ def build_reports(report_date: datetime.date, force: bool) -> None:
 		else:
 			raise ValueError(f"Unknown report type: {report_type}")
 		params = {"report_date": str(report_date), }
-		sql = build_query(db_column)
+		sql = build_query(report_type)
 		logger.debug(sql)
-		# sql2 = "SELECT COUNT(*) FROM dt_price;"
-		# logger.debug(sql2)
+		# with engine.connect() as conn:
+		# 	result = conn.execute(text(sql), params)
+		# 	logger.debug(f"{period.capitalize()} rows added . . . {result.rowcount}")
+		# 	conn.commit()
+		# 	logger.debug(f"{period.capitalize()} rows added . . . {result.rowcount}")
 		with engine.connect() as conn:
-			results = conn.execute(text(sql), params).fetchone()
-			row = dict(results._mapping)
-			columns = row.keys()
-			logger.debug("  ".join(columns))
-			logger.debug("  ".join([str(x) for x in row.values()]))
+			result = conn.execute(text(sql), params).fetchone()
+			row = dict(result._mapping)
+			logger.info(report_name)
+			logger.info(row)
+			# columns = row.keys()
+			# logger.debug("  ".join(columns))
+			# logger.debug("  ".join([str(x) for x in row.values()]))
 			do_nothing()
 	return
 
 
-def currency_columns(currency_code: str, db_column: str) -> list[str]:
-	"""
+def build_table(table_type: str):
+	table_type = table_type.lower()
+	table_prefix = "dt_"
+	date_column = "date_id"
+	if table_type not in ["daily", "weekly", "monthly", "quarterly", "yearly"]:
+		raise ValueError(f"Unrecognized table_type: '{table_type}'")
+	if table_type == "daily":
+		# VIEW: daily_change
+		date_column = "date_id"
+	elif table_type == "weekly":
+		# VIEW: weekly_change
+		date_column = "week_thru"
+	elif table_type == "monthly":
+		# VIEW: monthly_change
+		date_column = "month_thru"
+	elif table_type == "quarterly":
+		# VIEW: quarterly_change
+		date_column = "quarter_thru"
+	elif table_type == "yearly":
+		# VIEW: yearly_change
+		date_column = "yearly_thru"
+	columns = [date_column,]
+	columns.extend(currency_columns("cad"))
+	columns.extend(currency_columns("usd"))
+	cols = ",".join(columns)
+	sql = "\n".join([
+		f"INSERT INTO dt_{table_type}({cols})",
+		f"SELECT {cols}",
+		f"FROM {table_type}_change",
+		f"WHERE {date_column} < :today",
+		f"ON CONFLICT ({date_column}) DO NOTHING;",
+	])
+	params = {"today": _run_dt.date()}
+	with engine.connect() as conn:
+		result = conn.execute(text(sql), params)
+		logger.debug(f"{table_type.capitalize()} rows added . . . {result.rowcount}")
+		conn.commit()
+	return
 
+
+def currency_columns(currency_code: str) -> list[str]:
+	"""
+	Returns list of currency columns for use with *ly_change views
 	:param currency_code: three-letter currency code (eg. CAD or USD)
 	:return: list of currency columns
 	"""
@@ -168,13 +230,25 @@ def currency_columns(currency_code: str, db_column: str) -> list[str]:
 		(SELECT cad FROM dt_price WHERE date_id = '2024-11-25' ORDER BY date_id ASC) cad_open,
 		(SELECT cad FROM dt_price WHERE date_id = '2024-11-25' ORDER BY date_id DESC) cad_close
 	"""
-	columns = [
-		f"MIN({cc}) AS {cc}_lo",
-		f"MAX({cc}) AS {cc}_hi",
-		f"(SELECT {cc} FROM dt_price WHERE {db_column} = :report_date ORDER BY {db_column} ASC) {cc}_open",
-		f"(SELECT {cc} FROM dt_price WHERE {db_column} = :report_date ORDER BY {db_column} DESC) {cc}_close",
-	]
-	return columns
+	# columns = [
+	# 	f"MIN({cc}) AS {cc}_lo",
+	# 	f"MAX({cc}) AS {cc}_hi",
+	# 	f"(SELECT {cc} FROM dt_price WHERE {db_column} = :report_date ORDER BY {db_column} ASC) {cc}_open",
+	# 	f"(SELECT {cc} FROM dt_price WHERE {db_column} = :report_date ORDER BY {db_column} DESC) {cc}_close",
+	# ]
+	return f"{cc}_open {cc}_lo {cc}_hi {cc}_range {cc}_close {cc}_chg_amt {cc}_chg_pct".split()
+
+
+def check_for_data():
+	sql = "SELECT COUNT(*) FROM dt_price;"
+	with engine.connect() as conn:
+		result = conn.execute(text(sql))
+		if result.rowcount > 0:
+			row_count = result.fetchone()[0]
+			if row_count == 0:
+				raise Warning("No Data - Please run 'price_extractor' and try again.")
+			do_nothing()
+	return
 
 
 # ToDo: Change 'period' to 'date' and check against period-thru-dates in date dimension

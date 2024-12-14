@@ -778,3 +778,5 @@ log_dir
 # Archives
 *.bz2
 *.gz
+*.txz
+*.xz

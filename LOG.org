@@ -1,18 +1,77 @@
 #+TITLE:	BTC Rates
 #+SUBTITLE:	Log
 #+DATE:		2024-11-27 08:13:57-05:00
-#+LASTMOD: 2024-11-30 06:13:21-0500 (EST)
+#+LASTMOD: 2024-12-14 08:37:12-0500 (EST)
 #+OPTIONS:	toc:nil num:nil
 #+STARTUP:	indent show3levels
 #+CATEGORIES[]:	Projects
-#+TAGS[]:	log python sql bitcoin blockchain
+#+TAGS[]:	log python sql bitcoin blockchain yahoofinance
 
+* Saturday, December 14, 2024
+** Issues
+*** XDG Runtime Directory
+- ~XDG_RUNTIME_DIR~ seems to be unavailable to cron jobs
+- It can be specified in ~~/.crontab~
+** Deployment
+1. Used ~pg_dump -t btc_rates.dt_yahoo_daily --data-only~ to export data
+2. Dropped the ~btc_rates~ schema from the database
+3. Ran ~sqitch deploy~ to "officially" create the database
+4. Restored the data with ~xzcat yt_yahoo_daily.sql.xz | psql~
+* Friday, December 13, 2024
+** Program Changes
+- Retired ~btc_rates~ on local machine (still running on VPS)
+- ~btc_rates4~ is the main program, until I completely retire ~btc_rates~
+- Upgraded ~btc-rates-daily.sh~ to work with the database
+** Jupyter Notebooks
+- Much of my research is in the ~notebooks~ directory
+** Charts & Graphs
+- I have been playing with ~matplotlib~ in Jupyter notebooks
+- I haven't decided on what it is that I might want to chart
+* Monday, December 9, 2024
+** New Polling Program
+*** Features
+**** Data Provider: Yahoo! Finance
+- This is a Python package (~yfinance~) that shares data scraped from Yahoo! Finance (it isn't an actual API)
+- The following alternatives to Yahoo! Finance don't seem to offer better results:
+  * [[https://alphavantage.co][AlphaVantage]]
+  * [[https://apiverse.com][ApiVerse]]
+  * [[https://marketstack.com][MarketStack]]
+  * [[https://polygon.io][Polygon]]
+**** Database: PostgreSQL
+- Limiting data collection to daily data
+- Have collected entire available price history (since 2014)
+* Monday, December 2, 2024
+** Remote Database Connections
+#+begin_example shell
+ssh -f -N -L 6333:localhost:5432 vps
+psql postgresql://localhost:6333
+#+end_example
+*** Copy price table
+#+begin_example shell
+pg_dump -t btc_rates.dt_price --data-only | psql postgresql://localhost:6333
+#+end_example
+** XDG Directories
+*** New: ~XDG_STATE_HOME~
+- Default: ~$HOME/.local/state~
+- Purpose: Program state, logs, history, current cursor/reading position, etc.
+* Sunday, December 1, 2024
+** New Version of Polling Program
+- ~btc_rates~ was my initial project with the ~blockchain~ library
+- After five years, it is time to modernize
+*** New Features
+- ~loguru~ for logging
+- Integrate with database
 * Saturday, November 30, 2024
+** Adding a PostgreSQL Database
+- PostgreSQL provides a much better way to query the database
+** Database Version Control: Sqitch
+- This has become my preferred tool (over SQLAlchemy)
 
 * Wednesday, November 27, 2024
 - With Bitcoin prices on the rise, I working on this project, again
 ** Adding Reports
-*** Adding a Database
+*** Adding SQLite Database
+- A SQLite database seems the fastest way to produce summary reports (ie. weekly, monthly, etc.)
 
 * Thursday, December 9, 2021
 - Added "retry" loop

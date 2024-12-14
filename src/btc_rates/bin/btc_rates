@@ -5,15 +5,21 @@
 # http://blockxchain.org/2017/06/03/blockchain-and-python-exploring-the-python-blockchain-package/
 
 """ Retrieve Bitcoin prices using the blockchain library """
-__version__ = "2.2.40-dev0"
+__version__ = "2.3.41-dev0"
 
 import logging
-from blockchain import exchangerates as er
+import os
 from datetime import datetime, timedelta, timezone
 from logging.handlers import RotatingFileHandler, SMTPHandler
 from pathlib import Path
 from time import sleep
 
+import xdg
+from blockchain import exchangerates as er
+
+_basedir = Path(__file__).resolve().parent.parent
+__org__ = "LevellTech"
+__project__ = _basedir.stem
 __module__ = Path(__file__).resolve().stem
 
 
@@ -71,10 +77,17 @@ if __name__ == "__main__":
 	_run_utc = _run_dt.astimezone(timezone.utc).replace(tzinfo=None)
 	_fdate = _run_dt.strftime("%Y-%m")
 
+	# Directories
+	_state_dir = xdg.xdg_state_home() / __org__ / __project__
+	# Sub-Directories
+	logdir = _state_dir / "log"
+	# logdir = Path("~").expanduser() / ".local" / "var" / "log" / __module__
+
 	# Configure logging
-	logdir = Path("~").expanduser() / ".local" / "var" / "log" / __module__
-	Path.mkdir(logdir, parents=True, exist_ok=True)
-	logfilename = logdir.joinpath("%s_%s.log" % (__module__, _fdate))
+	logdir.mkdir(parents=True, exist_ok=True)
+	# Path.mkdir(logdir, parents=True, exist_ok=True)
+	# logfilename = logdir.joinpath("%s_%s.log" % (__module__, _fdate))
+	logfilename = logdir / f"{__module__}_{_fdate}.log"
 	log_level = logging.DEBUG
 	logger = logging.getLogger("")
 	file_handler = RotatingFileHandler(

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # price_extractor - Thursday, November 14, 2024
 """ Extract & analyze timestamps and prices from btc_rate logs """
-__version__ = "0.2.2-dev33"
+__version__ = "0.4.4-dev0"
 
 import builtins
 import lzma
@@ -11,18 +11,20 @@ import sys
 import time
 from datetime import datetime, timedelta
 from glob import glob
-from os.path import exists, getmtime, join, lexists, realpath
+from os.path import basename, exists, getmtime, join, lexists, realpath
 from pathlib import Path
 from time import sleep
 
 import sqlalchemy as sa
+import xdg
 from loguru import logger
 from environs import Env
 from sqlalchemy import create_engine, text
 from subprocess import run
-from xdg import XDG_CACHE_HOME, XDG_CONFIG_HOME, XDG_DATA_HOME, XDG_RUNTIME_DIR
+# from xdg import XDG_CACHE_HOME, XDG_CONFIG_HOME, XDG_DATA_HOME, XDG_RUNTIME_DIR
 
 _basedir = Path(__file__).resolve().parent.parent
+__org__ = "LevellTech"
 __project__ = _basedir.stem
 __module__ = Path(__file__).resolve().stem
 
@@ -39,6 +41,9 @@ def main():
 def init():
 	started = time.strftime(_iso_datefmt, _run_localtime)
 	logger.info(f"Run Start: {__project__}.{__module__} v{__version__} {started}")
+	# for d in [_cache_dir, _config_dir, _data_dir, _log_dir, _runtime_dir]:
+	# 	os.makedirs(d, exist_ok=True)
+	# logger.debug(f"Organization  . . {__org__}")
 	# logger.debug(f"Project . . . . . {__project__}")
 	# logger.debug(f"Module  . . . . . {__module__}")
 	# logger.debug(f"Base Dir  . . . . {_basedir}")
@@ -64,7 +69,7 @@ def init():
 
 
 def eoj():
-	vacuum()
+	# vacuum()
 	stop_ts = time.time()
 	stop_localtime = time.localtime(stop_ts)
 	stop_gmtime = time.gmtime(stop_ts)
@@ -106,10 +111,13 @@ def extract_prices():
 	last_date_id = datetime.fromtimestamp(last_ts).date()
 	last_log_dict = last_log_entry()
 	if last_log_dict:
-		last_date_id = last_log_dict["date_id"]
+		# Subtract one day from date of last price in database (to accommodate late-arriving files)
+		last_date_id = (last_log_dict["date_id"] - timedelta(days=1))
 		last_ts = time.mktime(last_date_id.timetuple())
-	for entry in [x for x in os.scandir(_log_dir) if x.is_file() and getmtime(x.path) > last_ts]:
+	for entry in [x for x in os.scandir(_log_dir) if x.name.startswith("btc_rates_") and ".log" in x.name and getmtime(x.path) > last_ts]:
 		log_dicts = parse_log(entry.path)
+		if not log_dicts:
+			continue
 		columns = "date_id date_time cad usd".split()
 		cols = ",".join(columns)
 		placeholders = ",".join([f":{x}" for x in columns])
@@ -132,27 +140,38 @@ def extract_prices():
 			date_thru = log_dicts[-1]["date_id"]
 			which_dates = f"{date_from} thru {date_thru}"
 			value_count = len(values)
-			logger.debug(f"{entry.name} Value Count for {which_dates} . . . {value_count}")
+			logger.debug(f"{entry.name:30s} Value Count for {which_dates} . . . {value_count}")
 			with engine.connect() as conn:
 				# INSERT prices into price table
 				result = conn.execute(text(sql), values)
 				conn.commit()
 			if value_count != result.rowcount:
-				logger.debug(f"{entry.name}   Row Count for {which_dates} . . . {result.rowcount}")
+				logger.debug(f"{entry.name:30s}   Row Count for {which_dates} . . . {result.rowcount}")
 			sleep(0.1)
 	return
 
 
 def get_remote_prices():
 	host = "vps"
-	year_month = _run_dt.strftime("%Y-%m")
-	src = f".local/var/log/btc_rates/btc_rates_{year_month}.log"
-	dst = os.path.expanduser("~/" + src.replace(".log", "-vps.log"))
-	cmd = f"scp -p {host}:{src} {dst}"
-	logger.debug(cmd)
-	output = run(cmd.split(), capture_output=False)
+	# ToDo: Update this to the XDG_STATE_HOME directory
+	# .local/state/LevellTech/btc_rates/log (_log_dir)
+	vps_dir = ".local/var/log/btc_rates"
+	cmd = f"ssh {host} find {vps_dir} -mtime -1 -type f"
+	output = run(cmd.split(), capture_output=True)
 	if output.returncode != 0:
-		logger.warning(output)
+		logger.warning(output.stderr)
+		do_nothing()
+	filenames = output.stdout.decode("utf8").splitlines()
+	for src in filenames:
+		# src = f".local/var/log/btc_rates/btc_rates_{filename}.log"
+		# dst = os.path.expanduser("~/" + src.replace(".log", "-vps.log"))
+		dst = _log_dir / basename(src).replace(".log", f"-{host}.log")
+		cmd = f"scp -p {host}:{src} {dst}"
+		logger.debug(cmd)
+		output = run(cmd.split(), capture_output=False)
+		if output.returncode != 0:
+			logger.warning(output.stderr)
+			do_nothing()
 	return
 
 
@@ -194,11 +213,15 @@ def parse_log(filename: str | Path) -> list[dict]:
 		open = lzma.open
 	with open(filename, "rt") as logfile:
 		lines = [x.rstrip() for x in logfile.readlines() if tag in x]
+	if "btc_rates3" in filename:
+		do_nothing()
 	for i, line in enumerate(lines):
 		# logger.info(f"{i + 1:5,d}) {line}")
 		parts = line.split()
+		if parts[3] != "INFO":
+			continue
 		if parts[2] != tag:
-			do_nothing()
+			continue
 		if len(parts) < 8:
 			do_nothing()
 		date_id = parts[0]
@@ -261,18 +284,20 @@ if __name__ == "__main__":
 	_debug = env.bool("DEBUG", default=False)
 
 	# Directories
-	_cache_dir = Path(XDG_CACHE_HOME) / __project__
-	_config_dir = Path(XDG_CONFIG_HOME) / __project__
-	_data_dir = Path(XDG_DATA_HOME) / __project__
-	_log_dir = Path(XDG_DATA_HOME).parent / "var" / "log" / __project__
-	_runtime_dir = Path(XDG_RUNTIME_DIR) / __project__
+	_cache_dir = xdg.xdg_cache_home() / __org__ / __project__
+	_config_dir = xdg.xdg_config_home() / __org__ / __project__
+	_data_dir = xdg.xdg_data_home() / __org__ / __project__
+	_runtime_dir = xdg.xdg_runtime_dir() / __org__ / __project__
+	_state_dir = xdg.xdg_state_home() / __org__ / __project__
+	# Sub-Directories
+	_log_dir = _state_dir / "log"
 
 	# Sub-Directories
-	_log_dir2 = _cache_dir / "log"
+	# _log_dir2 = _cache_dir / "log"
 
 	# Configure Logging (using Loguru)
-	_logfile = _log_dir2 / f"{__module__}.log"
-	_errfile = _log_dir2 / f"{__module__}.err"
+	_logfile = _log_dir / f"{__module__}.log"
+	_errfile = _log_dir / f"{__module__}.err"
 
 	logger.remove(0)
 	logger.add(
@@ -304,14 +329,9 @@ if __name__ == "__main__":
 	# logger.add("warning.log", rotation="10 MB", level="WARNING")
 	# logger.add("critical.log", rotation="10 MB", level="CRITICAL")
 
-	# Not sure how to add PostgreSQL notice
-	# import logging
-	# logging.basicConfig()  # log messages to stdout
-	# logging.getLogger('sqlalchemy.dialects.postgresql').setLevel(logging.INFO)
-
 	# Database
-	# _db_url = "sqlite:///" + str(_basedir / env("SQLITE_DB_NAME"))
 	_db_url = env("SQLALCHEMY_DATABASE_URI")
+	# _db_url = "sqlite:///" + str(_basedir / env("SQLITE_DB_NAME"))
 	_db_schema = env("DB_SCHEMA")
 	engine = create_engine(_db_url, echo=_debug)
 

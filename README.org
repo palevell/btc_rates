@@ -1,14 +1,17 @@
 #+TITLE:	BTC Rates
 #+SUBTITLE:	README
 #+DATE:		2024-11-27 08:13:57-05:00
-#+LASTMOD: 2024-11-28 04:12:23-0500 (EST)
+#+LASTMOD: 2024-12-09 05:16:54-0500 (EST)
 #+OPTIONS:	toc:nil num:nil
 #+STARTUP:	indent showeverything
 #+CATEGORIES[]:	Projects
-#+TAGS[]:	readme python sql bitccoin blockchain
+#+TAGS[]:	readme python sql bitccoin blockchain yahoofinance
 
 URL: 
 
 * Description
 
-I started this project in 2017, to explore blockchain programming in Python, and quit using it in 2019.
+I started this project in 2017, to explore blockchain programming in Python, and quit using it in 2019.  Since 2021, it has been running hourly and Emailing me daily reports.
+
+After Trump was re-elected as President in the USA, Bitcoin prices began getting closer to $100,000, and I wanted to add more reporting options.  Upon investigation, I discovered that the ~blockchain~ library is no longer listed in ~blockchain.info~'s GitHub repositories.  Not only that, ~get_price()~ method doesn't include a timestamp of any kind, so I was motivated to find another way to get Bitcoin prices, preferably including price history.  There is an unofficial *Yahoo Finance* library in Python that seems to provide me with what I want.
+

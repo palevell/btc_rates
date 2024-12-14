@@ -3,7 +3,5 @@
 %uri=https://github.com/palevell/btc_rates
 
 app_schema 2024-11-27T13:33:38Z Patrick <patrick29501@gmx.com> # Add schema for database objects
-dt_price [app_schema] 2024-11-27T13:41:47Z Patrick <patrick29501@gmx.com> # Add Bitcoin Price table
-daily_price [app_schema dt_price] 2024-11-28T11:37:27Z Patrick <patrick29501@gmx.com> # Add daily price aggregate view
-dt_daily [app_schema] 2024-11-30T11:43:41Z Patrick <patrick29501@gmx.com> # Add daily summary table
-daily_change [app_schema daily_price] 2024-11-30T14:09:31Z Patrick <patrick29501@gmx.com> # Add daily price change view
+dt_yahoo_daily [app_schema] 2024-12-08T22:10:06Z Patrick <patrick29501@gmx.com> # Add Yahoo daily table
+@v0.1.0-dev96 2024-12-14T16:47:58Z Patrick <patrick29501@gmx.com> # Tag v0.1.0-dev96
