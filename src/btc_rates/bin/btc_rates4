@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # btc_rates4 - Friday, December 6, 2024
 """ Retrieve Bitcoin prices using the yfinance library """
-__version__ = "0.1.0-dev96"
+__version__ = "0.1.0-dev99"
 
 import os
 import sys
@@ -55,7 +55,7 @@ def main():
 		if i > 0:
 			# Delay between calls to Yahoo Finance
 			time.sleep(uniform(2.0, 4.0))
-		logger.info(f"Fetching {symbol} data from {date_from} thru {date_thru} . . .")
+		logger.info(f"Processing {symbol} for {date_from} thru {date_thru} . . .")
 		df = download_price_data(symbol, date_from, date_thru)
 		result = df.to_sql(tbl, con=engine, schema=_db_schema, if_exists="append")
 		# logger.debug(f"Result: {result}")
@@ -68,7 +68,7 @@ def init():
 	logger.info(f"Run Start: {__module__} v{__version__} {started}")
 
 	# Show configured directories
-	show_paths()
+	# show_paths()
 
 	# Get list of table in database (for current schema)
 	params = {"schema": _db_schema}
@@ -102,7 +102,13 @@ def date_list(date_from: datetime.date, date_thru: datetime.date) -> list[dateti
 	:param date_thru: end of date range
 	:return: list of dates
 	"""
-	return [date_from + i * timedelta(days=1) for i in range(1, (date_thru - date_from).days + 1)]
+	if date_from == date_thru:
+		dates = [date_from,]
+	elif date_from < date_thru:
+		dates = [date_from + i * timedelta(days=1) for i in range(1, (date_thru - date_from).days + 1)]
+	else:
+		raise ValueError(f"date_from > date_thru ({date_from} > {date_thru})")
+	return dates
 
 
 def download_price_data(symbol: str, date_from: datetime.date, date_thru: datetime.date) -> pd.DataFrame:
@@ -123,8 +129,8 @@ def download_price_data(symbol: str, date_from: datetime.date, date_thru: dateti
 			was_open = xcal.is_session(dt)
 			if was_open:
 				break
-		logger.debug(f"Did {symbol} trade from {date_from} thru {date_thru}? {was_open}")
 	if was_open:
+		logger.debug(f"Fetching {symbol} data . . .")
 		df = yf.download(symbol, start=date_from, end=date_thru, interval="1d", multi_level_index=False, progress=False)
 		if not df.empty:
 			# Add column for symbol
@@ -137,7 +143,7 @@ def download_price_data(symbol: str, date_from: datetime.date, date_thru: dateti
 		else:
 			raise Warning("Empty DataFrame--this was unexpected!")
 	else:
-		logger.debug(f"{symbol} markets were closed for specified dates")
+		logger.debug(f"{symbol} markets were closed.")
 		do_nothing()
 	return df
 

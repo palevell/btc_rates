@@ -1,12 +1,25 @@
 #+TITLE:	BTC Rates
 #+SUBTITLE:	Log
 #+DATE:		2024-11-27 08:13:57-05:00
-#+LASTMOD: 2024-12-14 08:37:12-0500 (EST)
+#+LASTMOD: 2024-12-15 03:34:55-0500 (EST)
 #+OPTIONS:	toc:nil num:nil
 #+STARTUP:	indent show3levels
 #+CATEGORIES[]:	Projects
 #+TAGS[]:	log python sql bitcoin blockchain yahoofinance
 
+* Sunday, December 15, 2024
+** Issues
+*** YFinance Returning Extra Data
+**** Details
+- *Symbol:* TSLA
+- *Date Range:* yesterday and today
+- *Markets Open/Closed:* closed (program says markets were open)
+- *Results:* data for two days ago
+**** Cause
+- My ~date_list()~ generator returned an empty list when the date range was a single day
+- Default value for markets open flag is "open" (~was_open == True~)
+**** Solution
+- Add logic to ~date_list()~ to handle a date range of one day
 * Saturday, December 14, 2024
 ** Issues
 *** XDG Runtime Directory
