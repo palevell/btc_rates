@@ -1,12 +1,17 @@
 #+TITLE:	BTC Rates
 #+SUBTITLE:	Log
 #+DATE:		2024-11-27 08:13:57-05:00
-#+LASTMOD: 2024-12-15 03:34:55-0500 (EST)
+#+LASTMOD: 2024-12-16 07:15:26-0500 (EST)
 #+OPTIONS:	toc:nil num:nil
 #+STARTUP:	indent show3levels
 #+CATEGORIES[]:	Projects
 #+TAGS[]:	log python sql bitcoin blockchain yahoofinance
 
+* Monday, December 16, 2024
+** Issues
+*** No Data at Midnight
+- Evidently, YFinance needs a few minutes to get the previous day's data
+- Added ~sleep_until()~ function that waits until five minutes after midnight, when necessary
 * Sunday, December 15, 2024
 ** Issues
 *** YFinance Returning Extra Data

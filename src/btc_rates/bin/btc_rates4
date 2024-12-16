@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # btc_rates4 - Friday, December 6, 2024
 """ Retrieve Bitcoin prices using the yfinance library """
-__version__ = "0.1.0-dev99"
+__version__ = "0.1.0-dev102"
 
 import os
 import sys
@@ -79,6 +79,10 @@ def init():
 		if _table_name not in [x[0] for x in rows]:
 			# logger.error(f"Unable to find table '{_table_name}' in schema '{_db_schema}'")
 			raise NoSuchTableError(f"{_db_schema}.{_table_name}")
+
+	# Give Yahoo! Finance time to collect yesterday's data
+	after_midnight_dt = datetime(_run_dt.year, _run_dt.month, _run_dt.day, minute=5)
+	sleep_until(after_midnight_dt)
 	return
 
 
@@ -184,6 +188,17 @@ def show_paths():
 	logger.debug(f"Runtime Dir . . . {_runtime_dir}")
 	logger.debug(f"State Dir . . . . {_state_dir}")
 	logger.debug(f"Env File  . . . . {env_file}")
+	return
+
+
+def sleep_until(future_dt: datetime):
+	# Ensure datetime is timezone-aware
+	now_dt = datetime.now().astimezone()
+	future_dt = future_dt.astimezone()
+	interval = future_dt - now_dt
+	if interval.total_seconds() > 0:
+		logger.debug(f"Waiting {interval} for Yahoo! Finance to collect yesterday's data . . .")
+		time.sleep(interval.total_seconds())
 	return
 
 
