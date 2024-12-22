@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # btc_rates4 - Friday, December 6, 2024
 """ Retrieve Bitcoin prices using the yfinance library """
-__version__ = "0.1.0-dev102"
+__version__ = "0.1.0-dev108"
 
 import os
 import sys
@@ -70,7 +70,7 @@ def init():
 	# Show configured directories
 	# show_paths()
 
-	# Get list of table in database (for current schema)
+	# Get list of tables in database (for current schema)
 	params = {"schema": _db_schema}
 	sql = "SELECT relname FROM pg_stat_user_tables WHERE schemaname = :schema;"
 	with engine.connect() as conn:
@@ -81,8 +81,8 @@ def init():
 			raise NoSuchTableError(f"{_db_schema}.{_table_name}")
 
 	# Give Yahoo! Finance time to collect yesterday's data
-	after_midnight_dt = datetime(_run_dt.year, _run_dt.month, _run_dt.day, minute=5)
-	sleep_until(after_midnight_dt)
+	# after_midnight_dt = datetime(_run_dt.year, _run_dt.month, _run_dt.day, minute=15)
+	# sleep_until(after_midnight_dt)
 	return
 
 
@@ -135,17 +135,28 @@ def download_price_data(symbol: str, date_from: datetime.date, date_thru: dateti
 				break
 	if was_open:
 		logger.debug(f"Fetching {symbol} data . . .")
-		df = yf.download(symbol, start=date_from, end=date_thru, interval="1d", multi_level_index=False, progress=False)
-		if not df.empty:
-			# Add column for symbol
-			df.loc[:, "symbol"] = symbol
-			# Rename index & columns
-			df.index.name = "date_id"
-			df.rename(columns={"Close": "price", }, inplace=True)
-			# Only keep symbol and closing price
-			df = df[["symbol", "price"]]
+		max_retries = 10
+		delay_seconds = uniform(180, 300)
+		for retry in range(max_retries):
+			if retry > 0:
+				logger.debug(f"Attempt #{retry+1}: yf.download({symbol}, start={date_from}, end={date_thru})")
+				df = pd.DataFrame()
+			df = yf.download(symbol, start=date_from, end=date_thru, interval="1d", multi_level_index=False, progress=False)
+			logger.debug(f"DataFrame size: {df.size}")
+			if not df.empty:
+				break
+			else:
+				delay_seconds += uniform(180, 300)
+				sleeper(delay_seconds, retry)
 		else:
 			raise Warning("Empty DataFrame--this was unexpected!")
+		# Add column for symbol
+		df.loc[:, "symbol"] = symbol
+		# Rename index & columns
+		df.index.name = "date_id"
+		df.rename(columns={"Close": "price", }, inplace=True)
+		# Only keep symbol and closing price
+		df = df[["symbol", "price"]]
 	else:
 		logger.debug(f"{symbol} markets were closed.")
 		do_nothing()
@@ -191,14 +202,27 @@ def show_paths():
 	return
 
 
-def sleep_until(future_dt: datetime):
+def sleep_until_old(future_dt: datetime):
 	# Ensure datetime is timezone-aware
 	now_dt = datetime.now().astimezone()
 	future_dt = future_dt.astimezone()
 	interval = future_dt - now_dt
 	if interval.total_seconds() > 0:
-		logger.debug(f"Waiting {interval} for Yahoo! Finance to collect yesterday's data . . .")
+		logger.debug(f"Sleeping {interval} until {future_dt} . . .")
 		time.sleep(interval.total_seconds())
+	return
+
+
+def sleeper(seconds: float, loop_count: int=0):
+	now_dt = datetime.now().astimezone()
+	future_dt = now_dt + timedelta(seconds=seconds)
+	interval = future_dt - now_dt
+	hms = str(interval).split(".")[0]
+	msg = f"Sleeping {hms} until {future_dt.replace(microsecond=0)} . . ."
+	if loop_count > 0:
+		msg = f"Loop: {loop_count}; {msg}"
+	logger.debug(msg)
+	time.sleep(interval.total_seconds())
 	return
 
 

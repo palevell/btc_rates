@@ -1,12 +1,38 @@
 #+TITLE:	BTC Rates
 #+SUBTITLE:	Log
 #+DATE:		2024-11-27 08:13:57-05:00
-#+LASTMOD: 2024-12-16 07:15:26-0500 (EST)
+#+LASTMOD: 2024-12-22 08:33:20-0500 (EST)
 #+OPTIONS:	toc:nil num:nil
 #+STARTUP:	indent show3levels
 #+CATEGORIES[]:	Projects
 #+TAGS[]:	log python sql bitcoin blockchain yahoofinance
 
+* Sunday, December 22, 2024
+- ~btc_rates4~ ran with no errors--rescheduling for 02:00 seems to be the easiest way to fix it
+* Friday, December 20, 2024
+** Issues with ~btc_rates4~
+*** Retry Loop
+- At 03:15, the 8th retry loop had begun
+  * Running a new instance got the data
+  * Terminated scheduled instance
+- I can't see why the retry loop isn't working
+- If this persists, I will reschedule to 02:00 and change the loop to re-process tickers with missing data, after going through the entire list of tickers
+** Changes to ~btc_rates4~
+*** Retry Loop
+- Removed microseconds from log messages for improved readability
+- Added details to log messages
+- Re-initialized DataFrame before each retry
+* Thursday, December 19, 2024
+** Changes
+- Rescheduled ~btc_rates4~ to run at 01:00, instead of at midnight
+- Replaced ~sleep_until()~ function with ~sleeper()~, and removed call from ~init()~
+- Added retry loop that adds between three and five minutes to the sleep timer; with ten retries, it could sleep between 30 and 50 minutes if it reaches the last retry
+- Using a ~for-else~ construct in order to throw an exception if the maximum number of retries is reached
+* Wednesday, December 18, 2024
+- Increased "midnight delay" to 15 minutes
+- ~BTC-CAD~ is okay, but it seems that data for ~BTC-USD~ is still unavailable at 00:15
+* Tuesday, December 17, 2024
+- Increased "midnight delay" to ten minutes
 * Monday, December 16, 2024
 ** Issues
 *** No Data at Midnight
