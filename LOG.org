@@ -1,12 +1,16 @@
 #+TITLE:	BTC Rates
 #+SUBTITLE:	Log
 #+DATE:		2024-11-27 08:13:57-05:00
-#+LASTMOD: 2024-12-22 08:33:20-0500 (EST)
+#+LASTMOD: 2025-01-10 07:10:45-0500 (EST)
 #+OPTIONS:	toc:nil num:nil
 #+STARTUP:	indent show3levels
 #+CATEGORIES[]:	Projects
 #+TAGS[]:	log python sql bitcoin blockchain yahoofinance
 
+* Friday, January 10, 2025
+** Extra Data from Yahoo! Finance (YF)
+- YF is returning TSLA data for two days ago, instead of yesterday
+- Added a date filter to remove unwanted data from YF results
 * Sunday, December 22, 2024
 - ~btc_rates4~ ran with no errors--rescheduling for 02:00 seems to be the easiest way to fix it
 * Friday, December 20, 2024

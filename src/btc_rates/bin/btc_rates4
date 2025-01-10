@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # btc_rates4 - Friday, December 6, 2024
 """ Retrieve Bitcoin prices using the yfinance library """
-__version__ = "0.1.0-dev108"
+__version__ = "0.1.0-dev114"
 
 import os
 import sys
@@ -38,6 +38,7 @@ def main():
 	# Fetch last date in database
 	tbl = _table_name
 	symbols = env.list("YF_SYMBOLS", default=["BTC-CAD", "BTC-USD"])
+	yesterday = (_run_dt - timedelta(days=1)).date()
 	# symbols = ["BTC-CAD", "BTC-USD", "BCH-CAD", "BCH-USD", "BCH-BTC", "TSLA"]  # ToDo: environment variable (list)
 	for i, symbol in enumerate(symbols):
 		date_from = datetime(1970, 1, 1).date()
@@ -55,9 +56,14 @@ def main():
 		if i > 0:
 			# Delay between calls to Yahoo Finance
 			time.sleep(uniform(2.0, 4.0))
-		logger.info(f"Processing {symbol} for {date_from} thru {date_thru} . . .")
+		if date_from == yesterday:
+			msg = f"Processing {symbol} for yesterday . . ."
+		else:
+			msg = f"Processing {symbol} for {date_from} thru {yesterday} . . ."
+		logger.info(msg)
 		df = download_price_data(symbol, date_from, date_thru)
-		result = df.to_sql(tbl, con=engine, schema=_db_schema, if_exists="append")
+		if df.shape[0]:
+			result = df.to_sql(tbl, con=engine, schema=_db_schema, if_exists="append")
 		# logger.debug(f"Result: {result}")
 	# show_data()
 	return
@@ -150,13 +156,22 @@ def download_price_data(symbol: str, date_from: datetime.date, date_thru: dateti
 				sleeper(delay_seconds, retry)
 		else:
 			raise Warning("Empty DataFrame--this was unexpected!")
-		# Add column for symbol
-		df.loc[:, "symbol"] = symbol
-		# Rename index & columns
-		df.index.name = "date_id"
-		df.rename(columns={"Close": "price", }, inplace=True)
-		# Only keep symbol and closing price
-		df = df[["symbol", "price"]]
+		df1 = df.loc[date_from:date_thru]
+		extra_rows = df.shape[0] - df1.shape[0]
+		if extra_rows:
+			logger.warning(f"Yahoo! returned {extra_rows} extra row(s)")
+			df = df1
+		if not df.empty:
+			# Add column for symbol
+			df.loc[:, "symbol"] = symbol
+			# Rename index & columns
+			df.index.name = "date_id"
+			df.rename(columns={"Close": "price", }, inplace=True)
+			# Only keep symbol and closing price
+			df = df[["symbol", "price"]]
+		else:
+			# raise Warning("Empty DataFrame--this was unexpected!")
+			do_nothing()
 	else:
 		logger.debug(f"{symbol} markets were closed.")
 		do_nothing()
@@ -266,7 +281,7 @@ if __name__ == '__main__':
 		colorize=True,
 		diagnose=True,
 		format="<level>{level:8s} {function}:{line:03d}  {message}</level>",
-		level=0,
+		level="INFO",
 	)
 	logger.add(
 		_logfile,
