@@ -1,12 +1,46 @@
 #+TITLE:	BTC Rates
 #+SUBTITLE:	Log
 #+DATE:		2024-11-27 08:13:57-05:00
-#+LASTMOD: 2025-01-10 07:10:45-0500 (EST)
+#+LASTMOD: 2025-02-21 06:52:03-0500 (EST)
 #+OPTIONS:	toc:nil num:nil
 #+STARTUP:	indent show3levels
 #+CATEGORIES[]:	Projects
 #+TAGS[]:	log python sql bitcoin blockchain yahoofinance
 
+* Friday, February 21, 2025
+** Changes in YFinance
+*** YF.download()
+- ~auto_adjust~ option changed default value from ~False~ to ~True~
+- Program output now includes a notification of the change
+- Added ~auto_adjust=True~ parameter ~YF.download()~ calls
+* Thursday, February 20, 2025
+** Rate Limiting Error from Yahoo! Finance
+- This started two or three days ago
+- Solutions from last year didn't work (ie. pass User-Agent in request header)
+- The ~yfinance~ Python package has been updated and appears to have resolved the issue
+** Code Changes
+*** ~btc_rates4~
+**** Additions
+- Request sessions
+- Query for First Trading Date
+* Tuesday, February 18, 2025
+** Adding Statistics to ~btc_rates4~ Output
+- I thought it would be easier to collect data from YFinance
+** Exploring YFinance Features
+*** ticker()
+**** info()
+- Company information, including price statistics
+**** fastinfo()
+- Brief company information, including price statistics; some of the averages are different than what ~info()~ returns
+**** news()
+- This looks intriguing, and has me wondering about which tickers I want to track
+** Limitations of Exchange Calendars Package
+*** Open/Close Dates
+- This was causing errrors when new ticker symbols were added that began trading more than 20 years ago (ie. AAPL)
+- Defaults to 20 years ago, can be overridden by setting ~GLOBAL_DEFAULT_START~
+  #+begin_example python
+  xcals.exchange_calendar.GLOBAL_DEFAULT_START = pd.Timestamp("1970-01-01")
+  #+end_example
 * Friday, January 10, 2025
 ** Extra Data from Yahoo! Finance (YF)
 - YF is returning TSLA data for two days ago, instead of yesterday

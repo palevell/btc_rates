@@ -2,26 +2,29 @@
 # -*- coding: utf-8 -*-
 # btc_rates4 - Friday, December 6, 2024
 """ Retrieve Bitcoin prices using the yfinance library """
-__version__ = "0.1.0-dev114"
+__version__ = "0.1.6-dev4"
 
 import os
+import psutil
 import sys
 import time
 from datetime import datetime, timedelta
 from glob import glob
 from os.path import exists, getmtime, join, lexists, realpath
 from pathlib import Path
-from random import randint, uniform
+from random import randint, shuffle, uniform
 
 import click
 import exchange_calendars as xcals
 import pandas as pd
+import requests
 import sqlalchemy as sa
 import xdg
 import yfinance as yf
 from dateutil.parser import parse, ParserError
 from environs import Env
 from loguru import logger
+from requests import Session
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import NoSuchTableError
 
@@ -38,43 +41,138 @@ def main():
 	# Fetch last date in database
 	tbl = _table_name
 	symbols = env.list("YF_SYMBOLS", default=["BTC-CAD", "BTC-USD"])
-	yesterday = (_run_dt - timedelta(days=1)).date()
-	# symbols = ["BTC-CAD", "BTC-USD", "BCH-CAD", "BCH-USD", "BCH-BTC", "TSLA"]  # ToDo: environment variable (list)
-	for i, symbol in enumerate(symbols):
-		date_from = datetime(1970, 1, 1).date()
-		date_thru = _run_dt.date()
-		# Get date of last row in price table
-		params = {"symbol": symbol,}
-		sql = f"SELECT max(date_id) FROM {tbl} WHERE symbol = :symbol;"
-		with engine.connect() as conn:
-			last_date = conn.execute(text(sql), params).fetchone()[0]
-			if last_date:
-				date_from = last_date + timedelta(days=1)
-		if date_from == _run_dt.date():
-			logger.debug(f"Skipping {symbol} (data is current)")
-			continue
-		if i > 0:
-			# Delay between calls to Yahoo Finance
-			time.sleep(uniform(2.0, 4.0))
-		if date_from == yesterday:
-			msg = f"Processing {symbol} for yesterday . . ."
-		else:
-			msg = f"Processing {symbol} for {date_from} thru {yesterday} . . ."
-		logger.info(msg)
-		df = download_price_data(symbol, date_from, date_thru)
-		if df.shape[0]:
-			result = df.to_sql(tbl, con=engine, schema=_db_schema, if_exists="append")
-		# logger.debug(f"Result: {result}")
-	# show_data()
+	shuffle(symbols)
+	# yesterday = (_run_dt - timedelta(days=1)).date()
+	csv_rows = []
+	last_prices = {}
+	# Create requests session for YFinance
+	with requests.Session() as s:
+		# headers = {"User-Agent": "brain-riffled-retract-typography's-dockets"}
+		# s.headers = headers
+		for i, symbol in enumerate(symbols):
+			date_from = datetime(1970, 1, 1).date()
+			date_thru = _run_dt.date()
+			# Get date of last row in price table
+			# sql = f"SELECT max(date_id) FROM {tbl} WHERE symbol = :symbol;"
+			# Get last row in price table
+			colums = "date_id price".split()
+			cols = ",".join(colums)
+			whr = "symbol = :symbol"
+			ordr = "date_id DESC"
+			params = {"symbol": symbol,}
+			sql = f"SELECT {cols} FROM {tbl} WHERE {whr} ORDER BY {ordr} LIMIT 1;"
+			with engine.connect() as conn:
+				try:
+					last_date, last_price = conn.execute(text(sql), params).fetchone()
+				except TypeError as te:
+					logger.warning(f"No data for {symbol}")
+				except Exception as e:
+					logger.exception(e)
+					do_nothing()
+				else:
+					if last_date:
+						date_from = last_date + timedelta(days=1)
+						last_prices[symbol] = last_price
+			if date_from == _run_dt.date():
+				logger.debug(f"Skipping {symbol} (data is current)")
+				continue
+			if i > 0:
+				# Delay between calls to Yahoo Finance
+				sleeper(uniform(2.0, 4.0))
+			# if date_from == yesterday:
+			# 	msg = f"Processing {symbol} for yesterday . . ."
+			# else:
+			# 	msg = f"Processing {symbol} for {date_from} thru {yesterday} . . ."
+			delay_seconds = uniform(_min_retry_seconds, _max_retry_seconds)
+			for attempt in range(1, _max_retries + 1):
+				try:
+					if attempt > 1:
+						msg = f"{i+1:3d}) Processing {symbol} (attempt {attempt}) . . ."
+					else:
+						msg = f"{i+1:3d}) Processing {symbol}  . . ."
+					logger.info(msg)
+					df = download_price_data(symbol, s, date_from, date_thru)
+					# Add new price to database
+					if df.shape[0]:
+						df.to_sql(tbl, con=engine, schema=_db_schema, if_exists="append")
+						lines = df.to_csv(header=False).splitlines()
+						for line in lines:
+							csv_rows.append(line.rstrip())
+						do_nothing()
+					break
+				except Exception as e:
+					if attempt < _max_retries:
+						logger.warning(e)
+						sleeper(uniform(_min_retry_seconds, _max_retry_seconds), attempt)
+						delay_seconds += uniform(_min_retry_seconds, _max_retry_seconds)
+					else:
+						raise
+	if csv_rows:
+		seen_symbols = []
+		# logger.info("*** New Data ***")
+		# logger.info("     date     symbol   price")
+		last_csv_date = ""
+		for i, csv_row in enumerate(sorted(csv_rows)):
+			csv_date, csv_symbol, csv_price = csv_row.split(",")
+			if csv_date != last_csv_date:
+				last_csv_date = csv_date
+				y, m, d = [int(x) for x in csv_date.split("-")]
+				dt = datetime(y, m, d).strftime("%A, %B %-d, %Y")
+				# logger.info(f"*** New Data for {csv_date:10s} ***")
+				logger.info(dt)
+			csv_price = float(csv_price)
+			if csv_symbol not in seen_symbols:
+				seen_symbols.append(csv_symbol)
+			if csv_price > 0.1:
+				# msg = f"{csv_date:10s} {csv_symbol:8s} {csv_price:10,.2f}"
+				msg = f"{i+1:3d}) {csv_symbol:8s} {csv_price:10,.2f}"
+			else:
+				# msg = f"{csv_date:10s} {csv_symbol:8s} {csv_price:12,.4f}"
+				msg = f"{i+1:3d}) {csv_symbol:8s} {csv_price:12,.4f}"
+			logger.info(msg)
+		if len(symbols) > len(seen_symbols):
+			unseen = []
+			for s in symbols:
+				if s not in seen_symbols:
+					unseen.append(s)
+			msg = "*** No new data for: " + ", ".join(sorted(unseen))
+			logger.info(msg)
 	return
 
 
 def init():
+	# global _headers
+	# global _ua_dict
 	started = time.strftime(_iso_datefmt, _run_localtime)
 	logger.info(f"Run Start: {__module__} v{__version__} {started}")
 
-	# Show configured directories
-	# show_paths()
+	# Allow time for XDG_RUNTIME_DIR to be created
+	last_reboot_dt = datetime.fromtimestamp(psutil.boot_time()).astimezone()
+	delay_seconds = 30 - (_run_dt - last_reboot_dt).total_seconds()
+	if delay_seconds > 0:
+		sleeper(delay_seconds)
+
+	# Set Firefox headers
+	"""_headers = {
+		# "Priority": "u=0, i",
+		"Sec-Gpc": "1",
+		# "Dnt": "1",
+		"Sec-Fetch-User": "?1",
+		"Sec-Fetch-Site": "none",
+		"Sec-Fetch-Mode": "navigate",
+		"Sec-Fetch-Dest": "document",
+		# "Upgrade-Insecure-Requests": "1",
+		# "Connection": "keep-alive",
+		# "Accept-Encoding": "gzip, deflate, br, zstd",
+		# "Accept-Language": "en-US,en;q=0.5",
+		# "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+		"User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:135.0) Gecko/20100101 Firefox/135.0",
+		# "Host": "patrickallan.online",
+		# "Content-Length": "",
+		# "Content-Type": "",
+	}"""
+	# Load user agents
+	# _ua_dict = user_agents()
 
 	# Get list of tables in database (for current schema)
 	params = {"schema": _db_schema}
@@ -85,10 +183,6 @@ def init():
 		if _table_name not in [x[0] for x in rows]:
 			# logger.error(f"Unable to find table '{_table_name}' in schema '{_db_schema}'")
 			raise NoSuchTableError(f"{_db_schema}.{_table_name}")
-
-	# Give Yahoo! Finance time to collect yesterday's data
-	# after_midnight_dt = datetime(_run_dt.year, _run_dt.month, _run_dt.day, minute=15)
-	# sleep_until(after_midnight_dt)
 	return
 
 
@@ -121,7 +215,7 @@ def date_list(date_from: datetime.date, date_thru: datetime.date) -> list[dateti
 	return dates
 
 
-def download_price_data(symbol: str, date_from: datetime.date, date_thru: datetime.date) -> pd.DataFrame:
+def download_price_data(symbol: str, session, date_from: datetime.date, date_thru: datetime.date) -> pd.DataFrame:
 	"""
 	Yahoo Finance market codes are garbage
 	:param symbol: trading symbol (ie. TSLA, BTC-CAD, T)
@@ -130,10 +224,22 @@ def download_price_data(symbol: str, date_from: datetime.date, date_thru: dateti
 	:return: Pandas DataFrame containing price data
 	"""
 	df = pd.DataFrame()
+	ticker = yf.Ticker(symbol, session=session)
+	sleeper(uniform(2, 4))
+	info_dict = ticker.get_info()
+	sleeper(uniform(2, 4))
 	# Were the markets open for the specified dates?
-	yf_xchg = yf.Ticker(symbol).info["exchange"]
+	yf_xchg = info_dict["exchange"]
+	sleeper(uniform(2, 4))
 	was_open = True
 	if yf_xchg != "CCC":  # Cryptocurrency trading
+		first_trade_epoch = info_dict["firstTradeDateMilliseconds"] / 1000
+		first_trade_dt = datetime.fromtimestamp(first_trade_epoch).date()
+		sleeper(uniform(2, 4))
+		if date_from < first_trade_dt:
+			logger.debug(f"First trade date: {first_trade_dt}")
+			date_from = first_trade_dt
+			do_nothing()
 		for dt in date_list(date_from, (date_thru - timedelta(days=1))):
 			xcal = xcals.get_calendar("XNAS")  # NASDAQ
 			was_open = xcal.is_session(dt)
@@ -141,27 +247,28 @@ def download_price_data(symbol: str, date_from: datetime.date, date_thru: dateti
 				break
 	if was_open:
 		logger.debug(f"Fetching {symbol} data . . .")
-		max_retries = 10
-		delay_seconds = uniform(180, 300)
-		for retry in range(max_retries):
+		# max_retries = 10
+		# delay_seconds = uniform(180, 300)
+		delay_seconds = uniform(_min_retry_seconds, _max_retry_seconds)
+		for retry in range(_max_retries):
 			if retry > 0:
 				logger.debug(f"Attempt #{retry+1}: yf.download({symbol}, start={date_from}, end={date_thru})")
 				df = pd.DataFrame()
-			df = yf.download(symbol, start=date_from, end=date_thru, interval="1d", multi_level_index=False, progress=False)
+			df = yf.download(symbol, session=session, start=date_from, end=date_thru, auto_adjust=True, interval="1d", multi_level_index=False, progress=False)
 			logger.debug(f"DataFrame size: {df.size}")
 			if not df.empty:
 				break
 			else:
-				delay_seconds += uniform(180, 300)
+				delay_seconds += uniform(_min_retry_seconds, _max_retry_seconds)
 				sleeper(delay_seconds, retry)
 		else:
-			raise Warning("Empty DataFrame--this was unexpected!")
-		df1 = df.loc[date_from:date_thru]
-		extra_rows = df.shape[0] - df1.shape[0]
-		if extra_rows:
-			logger.warning(f"Yahoo! returned {extra_rows} extra row(s)")
-			df = df1
+			logger.warning(f"No data for {symbol}")
 		if not df.empty:
+			df1 = df.loc[date_from:date_thru]
+			extra_rows = df.shape[0] - df1.shape[0]
+			if extra_rows:
+				logger.warning(f"Yahoo! returned {extra_rows} extra row(s)")
+				df = df1
 			# Add column for symbol
 			df.loc[:, "symbol"] = symbol
 			# Rename index & columns
@@ -183,18 +290,24 @@ def plot_prices():
 	return
 
 
-def show_data():
+def show_data(date_from: datetime.date, date_thru: datetime.date):
 	tbl = _table_name
-	# Show last three days of price data in the database
+	# Show price data for the specified date range
 	columns = "date_id symbol price".split()
 	cols = ",".join(columns)
+	# params = {"date_from": (_run_dt - timedelta(days=3)).date()}
+	if date_from == date_thru:
+		params = {"date_thru": date_thru,}
+		whr = "date_id = :date_thru"
+	else:
+		params = {"date_from": date_from, "date_thru": date_thru,}
+		whr = "date_id BETWEEN :date_from AND :date_thru"
 	sql = "\n".join([
 		f"SELECT {cols} FROM {tbl}",
-		"WHERE date_id >= :date_from",
+		f"WHERE {whr}",
 		"ORDER BY date_id DESC, symbol",
 		"LIMIT 25;",
 	])
-	params = {"date_from": (_run_dt - timedelta(days=3)).date()}
 	with engine.connect() as conn:
 		result = conn.execute(text(sql), params)
 	for date_id, symbol, price in result.fetchall():
@@ -217,17 +330,6 @@ def show_paths():
 	return
 
 
-def sleep_until_old(future_dt: datetime):
-	# Ensure datetime is timezone-aware
-	now_dt = datetime.now().astimezone()
-	future_dt = future_dt.astimezone()
-	interval = future_dt - now_dt
-	if interval.total_seconds() > 0:
-		logger.debug(f"Sleeping {interval} until {future_dt} . . .")
-		time.sleep(interval.total_seconds())
-	return
-
-
 def sleeper(seconds: float, loop_count: int=0):
 	now_dt = datetime.now().astimezone()
 	future_dt = now_dt + timedelta(seconds=seconds)
@@ -235,10 +337,24 @@ def sleeper(seconds: float, loop_count: int=0):
 	hms = str(interval).split(".")[0]
 	msg = f"Sleeping {hms} until {future_dt.replace(microsecond=0)} . . ."
 	if loop_count > 0:
-		msg = f"Loop: {loop_count}; {msg}"
+		msg = f"Retry: {loop_count}; {msg}"
 	logger.debug(msg)
 	time.sleep(interval.total_seconds())
 	return
+
+
+def user_agents_old() -> dict:
+	agents = {}
+	for name in "default brave chrome curl falkon firefox opera yt-dlp".split():
+		if name == "default":
+			ua_filename = Path("~/.user_agent").expanduser()
+		else:
+			ua_filename = Path("~/.user_agents").expanduser() / name
+		if not ua_filename.exists():
+			raise FileNotFoundError(str(ua_filename))
+		with open(ua_filename, "rt") as uafile:
+			agents[name] = uafile.read().rstrip()
+	return agents
 
 
 if __name__ == '__main__':
@@ -251,6 +367,9 @@ if __name__ == '__main__':
 	_run_ymdhms = f"{_run_ymd}_{_run_hms}"
 	_iso_datefmt = "%Y-%m-%d %H:%M:%S%z"
 	_fdate = _run_dt.strftime("%Y-%m")
+
+	# _headers = {}
+	# _ua_dict = {}
 
 	# Directories
 	_cache_dir = xdg.xdg_cache_home() / __org__ / __project__
@@ -269,6 +388,9 @@ if __name__ == '__main__':
 	else:
 		raise FileNotFoundError(env_file)
 	_debug = env.bool("DEBUG", default=False)
+	_max_retries = env.int("MAX_RETRIES", default=3)
+	_min_api_seconds, _max_api_seconds = env.list("API_DELAY_RANGE", default=[1.5, 4.5], subcast=float)
+	_min_retry_seconds, _max_retry_seconds = env.list("RETRY_DELAY_RANGE", default=[180, 300], subcast=float)
 
 	# Configure Logging (using Loguru)
 	_logfile = _log_dir / f"{__module__}_{_fdate}.log"
@@ -322,6 +444,10 @@ if __name__ == '__main__':
 		cursor.execute(sql)
 		cursor.close()
 		dbapi_connection.autocommit = existing_autocommit
+
+
+	# Workaround for Exchange Calendar default start date of 20 years ago
+	xcals.exchange_calendar.GLOBAL_DEFAULT_START = pd.Timestamp("1970-01-01")
 
 	init()
 	main()
