@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # btc_rates4 - Friday, December 6, 2024
 """ Retrieve Bitcoin prices using the yfinance library """
-__version__ = "0.1.6-dev4"
+__version__ = "0.1.6-dev5"
 
 import os
 import psutil
@@ -146,11 +146,11 @@ def init():
 	started = time.strftime(_iso_datefmt, _run_localtime)
 	logger.info(f"Run Start: {__module__} v{__version__} {started}")
 
-	# Allow time for XDG_RUNTIME_DIR to be created
-	last_reboot_dt = datetime.fromtimestamp(psutil.boot_time()).astimezone()
-	delay_seconds = 30 - (_run_dt - last_reboot_dt).total_seconds()
-	if delay_seconds > 0:
-		sleeper(delay_seconds)
+	# Allow time for networking and XDG_RUNTIME_DIR to become available
+	login_ts = psutil.users()[0].started
+	wait_seconds = _run_ts - login_ts - 90  # 90 seconds
+	if wait_seconds < 0:
+		sleeper(abs(wait_seconds))
 
 	# Set Firefox headers
 	"""_headers = {

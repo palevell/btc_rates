@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# btc-rates-daily.sh v1.3.23 - Sunday, April 24, 2022
+# btc-rates-daily.sh v1.3.24 - Sunday, April 24, 2022
 _me="${0##*/}"
 
 set -eu
@@ -7,12 +7,12 @@ set -eu
 YM=$(date +%Y-%m -d 'yesterday')
 YMD=$(date -I -d 'yesterday')
 HOST=cron.servarica
-LOCAL_DIR=~/.local/var/log/btc_rates
+LOCAL_DIR=~/.local/state/LevellTech/log
 REMOTE_DIR=${HOST}:.local/var/log/btc_rates
 MSG_FILE=${LOCAL_DIR}/.msg-${YMD}.msg
 
 scp -pq ${REMOTE_DIR}/btc_rates_${YM}.log ${LOCAL_DIR}/btc_rates+${YM}-vps.log
-LOGFILES=$(find ~/.local/{state/LevellTech,var/log}/btc_rates -name "btc_rates*log" -mtime -1)
+LOGFILES=$(find ~/.local/{state/LevellTech/log,var/log/btc_rates} -name "btc_rates*log" -mtime -1)
 grep -h ${YMD} $LOGFILES | grep "get_prices INFO" | sort -u >$MSG_FILE
 
 cat $MSG_FILE | mail -s "BTC Rates for ${YMD} (via blockchain.info)" patrick

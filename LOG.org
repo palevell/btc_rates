@@ -7,6 +7,10 @@
 #+CATEGORIES[]:	Projects
 #+TAGS[]:	log python sql bitcoin blockchain yahoofinance
 
+* Friday, March 14, 2025
+** Wait for Login Processes to Complete
+- On a slower computer, ~btc_rates4~ throws network errors if run too soon after logging-in
+- Using ~psutil.users[0].started~ to retrieve login time, assuming that the first user is the current user
 * Friday, February 21, 2025
 ** Changes in YFinance
 *** YF.download()
