@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # btc_rates4 - Friday, December 6, 2024
 """ Retrieve Bitcoin prices using the yfinance library """
-__version__ = "0.1.6-dev5"
+__version__ = "0.1.7-dev0"
 
 import os
 import psutil
@@ -17,14 +17,14 @@ from random import randint, shuffle, uniform
 import click
 import exchange_calendars as xcals
 import pandas as pd
-import requests
+# import requests
 import sqlalchemy as sa
 import xdg
 import yfinance as yf
+from curl_cffi import requests
 from dateutil.parser import parse, ParserError
 from environs import Env
 from loguru import logger
-from requests import Session
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import NoSuchTableError
 
@@ -45,8 +45,9 @@ def main():
 	# yesterday = (_run_dt - timedelta(days=1)).date()
 	csv_rows = []
 	last_prices = {}
-	# Create requests session for YFinance
-	with requests.Session() as s:
+	# Create curl_cffi.requests session for YFinance that impersonates Chrome
+	# Ref: https://github.com/ranaroussi/yfinance/issues/2422#issuecomment-2840774505
+	with requests.Session(impersonate="chrome") as s:
 		# headers = {"User-Agent": "brain-riffled-retract-typography's-dockets"}
 		# s.headers = headers
 		for i, symbol in enumerate(symbols):
@@ -65,7 +66,7 @@ def main():
 				try:
 					last_date, last_price = conn.execute(text(sql), params).fetchone()
 				except TypeError as te:
-					logger.warning(f"No data for {symbol}")
+					logger.warning(f"Database: No data for {symbol} {te}")
 				except Exception as e:
 					logger.exception(e)
 					do_nothing()

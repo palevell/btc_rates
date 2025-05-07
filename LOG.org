@@ -1,12 +1,22 @@
 #+TITLE:	BTC Rates
 #+SUBTITLE:	Log
 #+DATE:		2024-11-27 08:13:57-05:00
-#+LASTMOD: 2025-02-21 06:52:03-0500 (EST)
+#+LASTMOD: 2025-05-07 10:07:48-0400 (EDT)
 #+OPTIONS:	toc:nil num:nil
 #+STARTUP:	indent show3levels
 #+CATEGORIES[]:	Projects
 #+TAGS[]:	log python sql bitcoin blockchain yahoofinance
 
+* Wednesday, May 7, 2025
+** YFInance Too Many Requests Error
+- Replacing ~requests~ with ~curl_cffi.requests~ and ~Sessiom()~ with ~Session(impersonate=chrome)~ fixed this
+- Ref: [[https://github.com/ranaroussi/yfinance/issues/2422#issuecomment-2840774505][GitHub Issue]]
+* Saturday, March 15, 2025
+** 'TypeError' While Retrieving Last Price & Date
+- Program: ~btc_rates4~
+- Affected symbols: BCH-USD and BTC-USD
+- Whatever PostgreSQL returned, it triggered a TypeError
+- Re-running ~btc_rates4~ resolved the issue (expected data was in database)
 * Friday, March 14, 2025
 ** Wait for Login Processes to Complete
 - On a slower computer, ~btc_rates4~ throws network errors if run too soon after logging-in
